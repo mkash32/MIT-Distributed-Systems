@@ -1,6 +1,9 @@
 package mapreduce
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 // schedule starts and waits for all tasks in the given phase (Map or Reduce).
 func (mr *Master) schedule(phase jobPhase) {
@@ -24,5 +27,51 @@ func (mr *Master) schedule(phase jobPhase) {
 	//
 	// TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO TODO
 	//
+
+	var workerFree chan string = make(chan string)   // Channel used for signaling free workers
+	var stopReg chan bool = make(chan bool)   // Channel used for exiting registration goroutine after all tasks have been completed
+	var wg sync.WaitGroup
+
+	// Notify that presently registered workers are free
+	// Then listen for newly registered workers and notify that they are free.
+	// Exit this goroutine after all tasks are completed
+	go func() {
+		for _, worker := range mr.workers {
+			workerFree <- worker
+		}
+
+		// Goroutine will listen for any new worker registrations
+		for {
+			select {
+			case freeWorker := <- mr.registerChannel:
+				workerFree <- freeWorker
+			case <-stopReg:
+				return
+			}
+		}
+	}()
+
+	// Run tasks on free workers
+	for taskNumber := 0; taskNumber < ntasks; taskNumber++ {
+		worker := <- workerFree
+		args := &DoTaskArgs{mr.jobName, mr.files[taskNumber], phase, taskNumber, nios}
+		// TODO: error handling in case of failure of the RPC
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			call(worker, "Worker.DoTask", args, new(struct{}))
+
+			// If all tasks have finished by the completion of this RPC then,
+			// return without notifying that the worker is free. (otherwise the channel will be full and it will block)
+			if taskNumber == ntasks {
+				return
+			}
+			workerFree <- worker  // After call returns, worker is free
+		}()
+	}
+
+	// Wait for all of the tasks to finish
+	wg.Wait()
+	stopReg <- true
 	fmt.Printf("Schedule: %v phase done\n", phase)
 }
