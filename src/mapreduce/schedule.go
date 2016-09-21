@@ -55,18 +55,29 @@ func (mr *Master) schedule(phase jobPhase) {
 	for taskNumber := 0; taskNumber < ntasks; taskNumber++ {
 		worker := <- workerFree
 		args := &DoTaskArgs{mr.jobName, mr.files[taskNumber], phase, taskNumber, nios}
-		// TODO: error handling in case of failure of the RPC
+
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			call(worker, "Worker.DoTask", args, new(struct{}))
+
+			// Run task on a worker, if it fails then run on the next free worker until task is completed
+			for {
+				ok := call(worker, "Worker.DoTask", args, new(struct{}))
+				if ok {
+					break
+				} else {
+					worker = <- workerFree
+				}
+			}
 
 			// If all tasks have finished by the completion of this RPC then,
 			// return without notifying that the worker is free. (otherwise the channel will be full and it will block)
 			if taskNumber == ntasks {
 				return
 			}
-			workerFree <- worker  // After call returns, worker is free
+
+			// After Task is completed, worker is freed
+			workerFree <- worker
 		}()
 	}
 
