@@ -84,7 +84,7 @@ func TestBasicAgree(t *testing.T) {
 	fmt.Printf("Test: basic agreement ...\n")
 
 	iters := 3
-	for index := 1; index < iters+1; index++ {
+	for index := 0; index < iters+1; index++ {
 		nd, _ := cfg.nCommitted(index)
 		if nd > 0 {
 			t.Fatalf("some have committed before Start()")
@@ -149,8 +149,8 @@ func TestFailNoAgree(t *testing.T) {
 	if ok != true {
 		t.Fatalf("leader rejected Start()")
 	}
-	if index != 2 {
-		t.Fatalf("expected index 2, got %v", index)
+	if index != 1 {
+		t.Fatalf("expected index 1, got %v", index)
 	}
 
 	time.Sleep(2 * RaftElectionTimeout)
@@ -173,7 +173,7 @@ func TestFailNoAgree(t *testing.T) {
 	if ok2 == false {
 		t.Fatalf("leader2 rejected Start()")
 	}
-	if index2 < 2 || index2 > 3 {
+	if index2 < 1 || index2 > 2 {
 		t.Fatalf("unexpected index %v", index2)
 	}
 
